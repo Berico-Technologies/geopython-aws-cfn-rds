@@ -3,6 +3,7 @@
 
 #python
 venv/
+env/
 *pyc
 
 # Ignore local logs
@@ -10,3 +11,7 @@ logs/
 
 # Mac
 .DS_Store
+
+# Vagrant
+Vagrantfile
+.vagrant/
