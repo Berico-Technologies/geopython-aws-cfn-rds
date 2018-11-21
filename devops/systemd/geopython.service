@@ -1,0 +1,15 @@
+[Unit]
+Description=Instance to serve GeoPython
+After=network.target
+
+[Service]
+Type=simple
+User=flask
+Group=flaskgroup
+WorkingDirectory=/opt/geopython
+RuntimeDirectory=geopython
+Environment="PATH=/opt/geopython/env/bin"
+ExecStart=/opt/geopython/env/bin/python /opt/geopython/manage.py runserver -d
+
+[Install]
+WantedBy=multi-user.target
