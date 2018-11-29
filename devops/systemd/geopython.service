@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=flask
-Group=flaskgroup
+Group=flask
 WorkingDirectory=/opt/geopython
 RuntimeDirectory=geopython
 Environment="PATH=/opt/geopython/env/bin"

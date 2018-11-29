@@ -48,14 +48,14 @@ yum install -y git htop vim tree ccze
 
 # Install Python and pip
 yum groupinstall -y 'development tools'
-yum install python pytho34-devel python34-pip python34-virtualenv -y
+yum install python python34-devel python34-pip python34-virtualenv -y
 pip3 install --upgrade pip
 
 # Install and run Watchmaker
 pip install watchmaker
 export LC_ALL=en_US.utf8
 export LANG=en_US.utf8
-watchmaker --no-reboot --env prod
+#watchmaker --no-reboot --env prod
 
 # Set clean exit flag
 if [[ $? -eq 0 ]]; then

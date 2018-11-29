@@ -15,8 +15,10 @@ cd ${INSTALL_DIR}
 virtualenv-3 -p python3 env
 source env/bin/activate
 pip install -r ${INSTALL_DIR}/requirements.txt
-pip install gunicorn
 mkdir -p ${INSTALL_DIR}/instance
+
+# Init the database
+python /opt/geopython/manage.py db upgrade
 
 # Set permissions
 groupadd flaskgroup && useradd -m -g flaskgroup -s /bin/bash flask
