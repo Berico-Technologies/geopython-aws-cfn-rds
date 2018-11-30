@@ -1,6 +1,31 @@
-# GeoPython 2017
-## Intro
-This repo contains the accompanying code from the **Build your own Geospatial Microservice using Python/Flask/PostGIS** workshop thinkWhere gave at GeoPython 2017
+# Berico Technologies - PostGIS Stack Example
+## Introduction
+This repository contains an example of how to deploy a simple geospatial application using AWS CloudFormation. 
+The purpose is to demonstrate how it is possible to create an application deployment utilizing lightweight database migration tooling to initialize database features and schema from ephemeral EC2 instances within an Auto Scaling Group (ASG).
+
+The stack utilizes the following features:
+* RDS Postgres (Single-AZ deployment) 
+* Auto Scaling Group
+* Dynamic enabling of PostGIS extensions
+
+The accompanying code is branched from the **Build your own Geospatial Microservice using Python/Flask/PostGIS** workshop thinkWhere gave at GeoPython 2017. It provides a nice example of how to use the [Alembic](https://alembic.sqlalchemy.org/en/latest/index.html) database migration tools with the SQLAlchemy Database Toolkit for Python.
+The original source can be found on the [thinkWhere GitHub](https://github.com/thinkWhere/geopython17) site.
+
+## AWS CloudFormation
+A template can be found in the `devops/cfn/` subdirectory.
+
+The application stack example can be launched using the following AWS CLI command example:
+```bash
+aws cloudformation create-stack \
+    --stack-name postgis-asg-example \
+    --template-body file://asg-example.yaml \
+    --parameters \
+    ParameterKey=KeyName,ParameterValue=your-ssh-key-pair \
+    ParameterKey=DBName,ParameterValue=geopython \
+    ParameterKey=DBUser,ParameterValue=geopython \
+    ParameterKey=DBPassword,ParameterValue=your-strong-db-password
+```
+Make sure you replace the **your-ssh-key-pair** and **your-strong-db-password** with appropriate values.
 
 ## Dependencies
 Following must be available locally:

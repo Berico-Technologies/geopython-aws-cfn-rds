@@ -1,0 +1,251 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Metadata:
+  License: Apache-2.0
+Description: 'AWS RDS Postgres with PostGIS and Python Flask microservice using Auto Scaling'
+Parameters:
+  InstanceType:
+    Description: 'Instance type of the SSH bastion host/instance.'
+    Type: String
+    Default: 't2.micro'
+  KeyName:
+    Description: 'Key pair of the ec2-user to establish a SSH connection to the SSH bastion host/instance.'
+    Type: String
+    Default: ''
+  DBName:
+    Default: MyDatabase
+    Description: The database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBUser:
+    NoEcho: 'true'
+    Description: The database admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+  DBPassword:
+    NoEcho: 'true'
+    Description: The database admin account password
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+Mappings:
+  RegionMap:
+    'us-east-1':
+      AMI: 'ami-009d6802948d06e52'
+    'us-east-2':
+      AMI: 'ami-02e680c4540db351e'
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+Resources:
+  PostGreSQLDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: !Ref 'DBName'
+      AllocatedStorage: '5'
+      DBInstanceClass: db.t2.small
+      Engine: postgres
+      EngineVersion: 10.5
+      MasterUsername: !Ref 'DBUser'
+      MasterUserPassword: !Ref 'DBPassword'
+      PubliclyAccessible: false
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Ref 'AWS::StackName'
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: '0.0.0.0/0'
+  LaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          default: [base, code, environment, app, service]
+        base:
+          packages:
+            yum:
+              postgresql: []
+              python3: []
+              python3-devel: []
+              python3-pip: []
+              python-virtualenv: []
+              git: []
+              htop: []
+              tree: []
+              yum-cron: []
+            files:
+              '/etc/yum/yum-cron.conf':
+                content: !Sub |
+                  [commands]
+                  update_cmd = security
+                  update_messages = yes
+                  download_updates = yes
+                  apply_updates = yes
+                  random_sleep = 360
+
+                  [emitters]
+                  system_name = None
+                  emit_via = stdio
+                  output_width = 80
+
+                  [email]
+                  email_from = root@localhost
+                  email_to = root
+                  email_host = localhost
+
+                  [groups]
+                  group_list = None
+                  group_package_types = mandatory, default
+
+                  [base]
+                  debuglevel = -2
+                  mdpolicy = group:main
+                mode: '000644'
+                owner: root
+                group: root
+              '/etc/cfn/cfn-hup.conf':
+                content: !Sub |
+                  [main]
+                  stack=${AWS::StackId}
+                  region=${AWS::Region}
+                  interval=1
+                mode: '000400'
+                owner: root
+                group: root
+              '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
+                content: !Sub |
+                  [cfn-auto-reloader-hook]
+                  triggers=post.update
+                  path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
+                  action=/opt/aws/bin/cfn-init --verbose --stack=${AWS::StackName} --region=${AWS::Region} --resource=LaunchConfiguration
+                  runas=root
+              services:
+                sysvinit:
+                  cfn-hup:
+                    enabled: true
+                    ensureRunning: true
+                    files:
+                    - '/etc/cfn/cfn-hup.conf'
+                    - '/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+        code:
+          commands:
+            1-git:
+              command: "git clone https://github.com/Berico-Technologies/geopython-aws-cfn-rds.git /opt/geopython"
+        environment:
+          yum:
+            python3: []
+            python3-devel: []
+            python3-pip: []
+            postgresql: []
+          commands:
+            1-virtualenv:
+              command: "virtualenv -p python3 env"
+              cwd: "/opt/geopython"
+            2-devtools:
+              command: "yum groupinstall \"Development Tools\" -y"
+            3-postgresql-devel:
+              command: "yum install postgresql-devel -y"
+            4-pip:
+              command: "/opt/geopython/env/bin/pip install -r requirements.txt"
+              cwd: "/opt/geopython"
+          users:
+            flask:
+              homeDir: "/tmp"
+        app:
+          commands:
+            1-db-init:
+              command: "/opt/geopython/env/bin/python manage.py db upgrade"
+              cwd: "/opt/geopython"
+            2-ownership:
+              command: "chown -R flask:flask ."
+              cwd: "/opt/geopython"
+          files:
+            '/opt/geopython/instance/config.py':
+              content: !Sub |
+                import logging
+
+                # Logging
+                LOG_DIR = 'logs'
+                LOG_LEVEL = logging.DEBUG
+
+                # API
+                API_DOCS_URL = 'http://localhost:5000/api-docs/swagger-ui-v2/index.html?url=http://localhost:5000/api/docs'
+
+                # Database
+                SQLALCHEMY_DATABASE_URI = 'postgresql+pg8000://${DBUser}:${DBPassword}@${PostGreSQLDB.Endpoint.Address}:${PostGreSQLDB.Endpoint.Port}/${DBName}'
+                SQLALCHEMY_TRACK_MODIFICATIONS = True
+            '/etc/systemd/system/geopython.service':
+              content: !Sub |
+                [Unit]
+                Description=GeoPython application instance
+                After=network.target
+
+                [Service]
+                Type=simple
+                User=flask
+                Group=flask
+                WorkingDirectory=/opt/geopython
+                RuntimeDirectory=geopython
+                Environment="PATH=/opt/geopython/env/bin"
+                ExecStart=/opt/geopython/env/bin/python /opt/geopython/manage.py runserver -d
+
+                [Install]
+                WantedBy=multi-user.target
+              mode: '000640'
+              owner: root
+              group: root
+        service:
+          commands:
+            1-systemd-enable:
+              command: "systemctl enable geopython"
+            2-systemd-start:
+              command: "systemctl start geopython"
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+      SecurityGroups:
+      - !Ref SecurityGroup
+      - default
+      InstanceType: !Ref InstanceType
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -ex
+          yum update -y
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchConfiguration --region ${AWS::Region}
+          /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource AutoScalingGroup --region ${AWS::Region}
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones:
+        Fn::GetAZs: ''
+      LaunchConfigurationName:
+        Ref: LaunchConfiguration
+      MinSize: '1'
+      MaxSize: '1'
+      DesiredCapacity: '1'
+      Tags:
+      - Key: Name
+        Value: !Sub
+        - 'asg-instance-${StackName}'
+        - StackName: !Ref 'AWS::StackName'
+        PropagateAtLaunch: true
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT10M
+    DependsOn: PostGreSQLDB
+Outputs:
+  TemplateID:
+    Description: 'template id.'
+    Value: 'rds-postgis'
+  TemplateVersion:
+    Description: 'template version.'
+    Value: '__VERSION__'
+  StackName:
+    Description: 'Stack name.'
+    Value: !Sub '${AWS::StackName}'
