@@ -15,10 +15,8 @@ from micro.models.postgis import mapping  # noqa
 
 def create_app():
     """ Bootstrap function to initialise the Flask app and config """
-    app = Flask(__name__)
-
-    env = os.getenv('MICRO_ENV', 'Dev')  # default to Dev if config environment var not set
-    app.config.from_object('micro.config.{0}Config'.format(env))
+    app = Flask(__name__, instance_relative_config=True)
+    app.config.from_pyfile('config.py')
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -30,7 +28,7 @@ def create_app():
     app.register_blueprint(swagger_blueprint)
 
     initialise_logger(app)
-    app.logger.info('Geopython 17 Microservice starting up :)')
+    app.logger.info('Geopython Microservice starting up :)')
 
     init_flask_restful_routes(app)
 
@@ -67,9 +65,9 @@ def init_flask_restful_routes(app):
     from micro.api.mapping_api import MappingAPI
     from micro.api.swagger_docs_api import SwaggerDocsAPI
 
-    api.add_resource(HelloAPI,       '/api/v1/hello')
-    api.add_resource(MappingAPI,     '/api/v1/mapping', methods=['PUT'])
-    api.add_resource(MappingAPI,     '/api/v1/mapping/<string:name>', endpoint="get mapping", methods=['GET'])
-    api.add_resource(WordAPI,        '/api/v1/mapping/word/<string:word>')
-    api.add_resource(CalcAPI,        '/api/v1/calc/<int:num1>/multiplied-by/<int:num2>')
+    api.add_resource(HelloAPI, '/api/v1/hello')
+    api.add_resource(MappingAPI, '/api/v1/mapping', methods=['PUT'])
+    api.add_resource(MappingAPI, '/api/v1/mapping/<string:name>', endpoint="get mapping", methods=['GET'])
+    api.add_resource(WordAPI, '/api/v1/mapping/word/<string:word>')
+    api.add_resource(CalcAPI, '/api/v1/calc/<int:num1>/multiplied-by/<int:num2>')
     api.add_resource(SwaggerDocsAPI, '/api/docs')
